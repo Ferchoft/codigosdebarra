@@ -1,0 +1,1439 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SYSTEM INVENTORY v3.1.4</title>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/quagga@0.12.1/dist/quagga.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+        
+        :root {
+            --hacker-green: #0f0;
+            --matrix-green: #00ff41;
+            --dark-bg: #0a0a0a;
+            --darker-bg: #050505;
+            --panel-bg: rgba(15, 15, 15, 0.8);
+            --glow: 0 0 10px var(--hacker-green);
+            --text-glow: 0 0 5px var(--matrix-green);
+        }
+        
+        body {
+            font-family: 'Share Tech Mono', monospace;
+            margin: 0;
+            padding: 0;
+            background-color: var(--dark-bg);
+            color: var(--hacker-green);
+            background-image: 
+                radial-gradient(circle at 10% 20%, rgba(0, 255, 65, 0.05) 0%, transparent 20%),
+                radial-gradient(circle at 90% 80%, rgba(0, 255, 65, 0.05) 0%, transparent 20%);
+            overflow-x: hidden;
+        }
+        
+        .container {
+            max-width: 100%;
+            padding: 15px;
+            margin: 0 auto;
+            border: 1px solid var(--hacker-green);
+            box-shadow: var(--glow);
+            background-color: var(--darker-bg);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .container::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--hacker-green), transparent);
+            animation: scanline 3s linear infinite;
+        }
+        
+        @keyframes scanline {
+            0% { top: 0; }
+            100% { top: 100%; }
+        }
+        
+        h1 {
+            text-align: center;
+            margin: 15px 0;
+            color: var(--matrix-green);
+            font-size: clamp(1.5rem, 4vw, 2rem);
+            text-shadow: var(--text-glow);
+            letter-spacing: 2px;
+            position: relative;
+        }
+        
+        h1::after {
+            content: "_";
+            animation: blink 1s step-end infinite;
+        }
+        
+        @keyframes blink {
+            from, to { opacity: 0; }
+            50% { opacity: 1; }
+        }
+        
+        .scanner-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px;
+            margin: 0 auto 20px;
+            border: 2px solid var(--hacker-green);
+            border-radius: 5px;
+            overflow: hidden;
+            background-color: #000;
+            aspect-ratio: 4/3;
+            box-shadow: var(--glow);
+        }
+        
+        #scanner {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+            filter: contrast(1.2) brightness(0.7) sepia(0.3) hue-rotate(60deg);
+        }
+        
+        .scan-guide {
+            position: absolute;
+            top: 25%;
+            left: 10%;
+            width: 80%;
+            height: 50%;
+            border: 2px dashed var(--hacker-green);
+            pointer-events: none;
+            box-shadow: 0 0 15px var(--hacker-green);
+            animation: pulse 2s infinite alternate;
+        }
+        
+        @keyframes pulse {
+            from { opacity: 0.5; }
+            to { opacity: 1; }
+        }
+        
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 10px;
+            margin: 20px 0;
+        }
+        
+        button {
+            background-color: transparent;
+            color: var(--hacker-green);
+            border: 1px solid var(--hacker-green);
+            padding: 12px 20px;
+            border-radius: 0;
+            cursor: pointer;
+            font-size: clamp(14px, 3vw, 16px);
+            font-weight: normal;
+            min-width: 140px;
+            flex: 1 1 auto;
+            max-width: 200px;
+            transition: all 0.3s;
+            font-family: 'Share Tech Mono', monospace;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        button:hover {
+            background-color: rgba(0, 255, 0, 0.1);
+            box-shadow: var(--glow);
+            transform: translateY(-2px);
+        }
+        
+        button:disabled {
+            background-color: transparent;
+            color: #555;
+            border-color: #555;
+            cursor: not-allowed;
+            transform: none !important;
+            box-shadow: none;
+        }
+        
+        button::before {
+            content: "";
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: linear-gradient(
+                to bottom right,
+                transparent, transparent, transparent,
+                rgba(0, 255, 0, 0.1), transparent, transparent, transparent
+            );
+            transform: rotate(45deg);
+            transition: all 0.5s;
+        }
+        
+        button:hover::before {
+            left: 100%;
+            top: 100%;
+        }
+        
+        #flashBtn {
+            color: var(--hacker-green);
+            border-color: var(--hacker-green);
+        }
+        
+        #flashBtn.flash-on {
+            background-color: rgba(0, 255, 0, 0.2);
+            color: var(--matrix-green);
+            border-color: var(--matrix-green);
+        }
+        
+        #stopBtn {
+            color: #f00;
+            border-color: #f00;
+        }
+        
+        #stopBtn:hover {
+            background-color: rgba(255, 0, 0, 0.1);
+            box-shadow: 0 0 10px #f00;
+        }
+        
+        .status {
+            text-align: center;
+            padding: 12px;
+            border-radius: 0;
+            margin: 15px auto;
+            font-weight: normal;
+            max-width: 600px;
+            font-size: clamp(14px, 3vw, 16px);
+            border-left: 3px solid var(--hacker-green);
+            background-color: var(--panel-bg);
+            position: relative;
+        }
+        
+        .status::before {
+            content: ">> ";
+        }
+        
+        .status-scanning {
+            color: var(--hacker-green);
+            border-left-color: var(--hacker-green);
+        }
+        
+        .status-detected {
+            color: var(--matrix-green);
+            border-left-color: var(--matrix-green);
+        }
+        
+        .status-error {
+            color: #f00;
+            border-left-color: #f00;
+        }
+        
+        .status-warning {
+            color: #ff0;
+            border-left-color: #ff0;
+        }
+        
+        .product-form {
+            background-color: var(--panel-bg);
+            padding: 20px;
+            border-radius: 0;
+            margin: 20px auto;
+            box-shadow: var(--glow);
+            max-width: 600px;
+            display: none;
+            border: 1px solid var(--hacker-green);
+            position: relative;
+        }
+        
+        .product-form::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: 
+                linear-gradient(90deg, var(--panel-bg) 0%, transparent 1px),
+                linear-gradient(var(--panel-bg) 0%, transparent 1px);
+            background-size: 10px 10px;
+            pointer-events: none;
+            opacity: 0.3;
+            z-index: 0;
+        }
+        
+        .product-form > * {
+            position: relative;
+            z-index: 1;
+        }
+        
+        .product-form h3 {
+            margin-bottom: 15px;
+            color: var(--matrix-green);
+            font-size: clamp(1.2rem, 3vw, 1.5rem);
+            text-shadow: var(--text-glow);
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: normal;
+            font-size: clamp(14px, 3vw, 16px);
+            color: var(--hacker-green);
+        }
+        
+        .form-group input, .form-group textarea, .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 1px solid var(--hacker-green);
+            border-radius: 0;
+            font-size: clamp(14px, 3vw, 16px);
+            background-color: rgba(0, 0, 0, 0.5);
+            color: var(--hacker-green);
+            font-family: 'Share Tech Mono', monospace;
+            box-shadow: inset 0 0 10px rgba(0, 255, 0, 0.1);
+        }
+        
+        .form-group textarea {
+            min-height: 80px;
+            resize: vertical;
+        }
+        
+        .form-group input:focus, .form-group textarea:focus, .form-group select:focus {
+            outline: none;
+            border-color: var(--matrix-green);
+            box-shadow: 0 0 10px var(--hacker-green);
+        }
+        
+        .form-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        
+        .product-list {
+            margin: 30px auto;
+            max-width: 800px;
+        }
+        
+        .product-list h2 {
+            margin-bottom: 15px;
+            font-size: clamp(1.3rem, 3.5vw, 1.8rem);
+            color: var(--matrix-green);
+            text-shadow: var(--text-glow);
+            border-bottom: 1px solid var(--hacker-green);
+            padding-bottom: 5px;
+        }
+        
+        .product-item {
+            background-color: var(--panel-bg);
+            padding: 15px;
+            margin-bottom: 15px;
+            border: 1px solid var(--hacker-green);
+            box-shadow: var(--glow);
+            position: relative;
+            transition: all 0.3s;
+        }
+        
+        .product-item:hover {
+            box-shadow: 0 0 15px var(--hacker-green);
+            transform: translateY(-3px);
+        }
+        
+        .product-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        
+        .product-code {
+            font-weight: bold;
+            color: var(--matrix-green);
+            font-size: clamp(14px, 3vw, 16px);
+            word-break: break-all;
+            text-shadow: var(--text-glow);
+        }
+        
+        .product-exists {
+            color: #f00;
+            font-weight: normal;
+            font-size: clamp(12px, 2.5vw, 14px);
+            text-shadow: 0 0 5px #f00;
+        }
+        
+        .product-timestamp {
+            color: #aaa;
+            font-size: clamp(12px, 2.5vw, 14px);
+        }
+        
+        .product-details {
+            margin: 10px 0;
+        }
+        
+        .product-name {
+            font-weight: normal;
+            margin-bottom: 5px;
+            font-size: clamp(14px, 3vw, 16px);
+            word-break: break-word;
+            color: var(--matrix-green);
+            text-shadow: var(--text-glow);
+        }
+        
+        .product-description {
+            color: #aaa;
+            margin-bottom: 5px;
+            font-size: clamp(13px, 2.8vw, 15px);
+        }
+        
+        .product-category {
+            display: inline-block;
+            background-color: rgba(0, 100, 0, 0.3);
+            color: var(--hacker-green);
+            padding: 3px 8px;
+            border-radius: 0;
+            font-size: clamp(12px, 2.5vw, 14px);
+            margin-top: 5px;
+            border: 1px solid var(--hacker-green);
+        }
+        
+        .product-quantity {
+            display: inline-block;
+            background-color: rgba(0, 50, 0, 0.3);
+            color: var(--matrix-green);
+            padding: 3px 8px;
+            border-radius: 0;
+            font-size: clamp(12px, 2.5vw, 14px);
+            margin-top: 5px;
+            border: 1px solid var(--matrix-green);
+        }
+        
+        .product-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        .product-actions button {
+            min-width: auto;
+            padding: 8px 15px;
+            font-size: clamp(13px, 2.5vw, 15px);
+        }
+        
+        .edit-btn {
+            background-color: transparent;
+            color: #ff0;
+            border-color: #ff0;
+        }
+        
+        .edit-btn:hover {
+            background-color: rgba(255, 255, 0, 0.1);
+            box-shadow: 0 0 10px #ff0;
+        }
+        
+        .delete-btn {
+            background-color: transparent;
+            color: #f00;
+            border-color: #f00;
+        }
+        
+        .delete-btn:hover {
+            background-color: rgba(255, 0, 0, 0.1);
+            box-shadow: 0 0 10px #f00;
+        }
+        
+        .empty-list {
+            text-align: center;
+            padding: 20px;
+            background-color: var(--panel-bg);
+            border: 1px dashed var(--hacker-green);
+            font-size: clamp(14px, 3vw, 16px);
+            color: #aaa;
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .modal-content {
+            background-color: var(--panel-bg);
+            padding: 20px;
+            border: 1px solid var(--hacker-green);
+            width: 90%;
+            max-width: 500px;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: var(--glow);
+            position: relative;
+        }
+        
+        .modal-content::before {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: 
+                linear-gradient(90deg, var(--panel-bg) 0%, transparent 1px),
+                linear-gradient(var(--panel-bg) 0%, transparent 1px);
+            background-size: 15px 15px;
+            pointer-events: none;
+            opacity: 0.3;
+            z-index: 0;
+        }
+        
+        .modal-content > * {
+            position: relative;
+            z-index: 1;
+        }
+        
+        .modal-title {
+            margin-top: 0;
+            color: var(--matrix-green);
+            text-shadow: var(--text-glow);
+            border-bottom: 1px solid var(--hacker-green);
+            padding-bottom: 10px;
+        }
+        
+        /* Estilos para la vista previa de códigos */
+        .barcode-preview {
+            max-width: 100%;
+            height: auto;
+            margin: 10px 0;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border: 1px solid var(--hacker-green);
+        }
+        
+        .hidden {
+            display: none;
+        }
+        
+        /* Efecto de terminal parpadeante */
+        .terminal-cursor::after {
+            content: "_";
+            animation: blink 1s step-end infinite;
+        }
+        
+        /* Efecto de glitch */
+        @keyframes glitch {
+            0% { text-shadow: 2px 0 var(--hacker-green); }
+            20% { text-shadow: -2px 0 #0ff; }
+            40% { text-shadow: 2px 0 #f0f; }
+            60% { text-shadow: -2px 0 #ff0; }
+            80% { text-shadow: 2px 0 #0f0; }
+            100% { text-shadow: -2px 0 var(--hacker-green); }
+        }
+        
+        .glitch-effect {
+            animation: glitch 0.5s linear infinite;
+        }
+        
+        /* Responsive */
+        @media (max-width: 480px) {
+            .container {
+                padding: 10px;
+            }
+            
+            .scanner-container {
+                border-width: 1px;
+            }
+            
+            button {
+                padding: 10px 15px;
+                min-width: 120px;
+            }
+            
+            .product-form {
+                padding: 15px;
+            }
+            
+            .form-group input, .form-group textarea, .form-group select {
+                padding: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="terminal-cursor">SYSTEM INVENTORY v3.1.4 Edifer V.</h1>
+        
+        <div class="scanner-container">
+            <video id="scanner" playsinline></video>
+            <div class="scan-guide"></div>
+        </div>
+        
+        <div id="status" class="status status-scanning">INITIALIZING SCANNER COMPONENT...</div>
+        
+        <div class="controls">
+            <button id="startBtn">START SCAN</button>
+            <button id="flashBtn">FLASH MODE</button>
+            <button id="stopBtn" disabled>TERMINATE</button>
+        </div>
+        
+        <div id="productForm" class="product-form">
+            <h3 id="formTitle" class="terminal-cursor">NEW ITEM PROTOCOL</h3>
+            <div class="form-group">
+                <label for="productCode">IDENTIFIER:</label>
+                <input type="text" id="productCode" readonly>
+                <div id="codeExists" class="product-exists" style="display: none;">WARNING: IDENTIFIER ALREADY EXISTS</div>
+            </div>
+            <div class="form-group">
+                <label for="productName">ITEM DESIGNATION:</label>
+                <input type="text" id="productName" placeholder="EX: MILK 1L" required>
+            </div>
+            <div class="form-group">
+                <label for="productDescription">DESCRIPTION:</label>
+                <textarea id="productDescription" placeholder="ADDITIONAL DATA"></textarea>
+            </div>
+            <div class="form-group">
+                <label>CODE PREVIEW:</label>
+                <div id="barcodeContainer">
+                    <svg id="barcodePreview" class="barcode-preview hidden"></svg>
+                    <canvas id="qrPreview" class="barcode-preview hidden"></canvas>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="productCategory">CLASSIFICATION:</label>
+                <select id="productCategory">
+                    <option value="">SELECT CLASSIFICATION</option>
+                    <option value="alimentos">SUSTENANCE</option>
+                    <option value="bebidas">BEVERAGES</option>
+                    <option value="limpieza">CLEANSING</option>
+                    <option value="otros">OTHER</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="productQuantity">QUANTITY:</label>
+                <input type="number" id="productQuantity" min="1" value="1">
+            </div>
+            <div class="form-actions">
+                <button id="cancelBtn">ABORT</button>
+                <button id="saveBtn">COMMIT DATA</button>
+            </div>
+        </div>
+        
+        <div class="product-list">
+            <h2 class="terminal-cursor">CURRENT INVENTORY DATABASE</h2>
+            <div id="productListContainer">
+                <div class="empty-list">NO ITEMS REGISTERED</div>
+                <div id="productList"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="confirmModal" class="modal">
+        <div class="modal-content">
+            <h3 class="modal-title terminal-cursor">CONFIRM ACTION</h3>
+            <p id="confirmMessage">CONFIRM ITEM TERMINATION?</p>
+            <div class="form-actions">
+                <button id="modalCancel">ABORT</button>
+                <button id="modalConfirm" class="delete-btn">CONFIRM</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Elementos del DOM
+        const startBtn = document.getElementById('startBtn');
+        const flashBtn = document.getElementById('flashBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const scannerVideo = document.getElementById('scanner');
+        const statusDiv = document.getElementById('status');
+        const productForm = document.getElementById('productForm');
+        const productCodeInput = document.getElementById('productCode');
+        const productNameInput = document.getElementById('productName');
+        const productDescriptionInput = document.getElementById('productDescription');
+        const productCategoryInput = document.getElementById('productCategory');
+        const productQuantityInput = document.getElementById('productQuantity');
+        const codeExistsDiv = document.getElementById('codeExists');
+        const saveBtn = document.getElementById('saveBtn');
+        const cancelBtn = document.getElementById('cancelBtn');
+        const productList = document.getElementById('productList');
+        const emptyListMessage = document.querySelector('.empty-list');
+        const confirmModal = document.getElementById('confirmModal');
+        const confirmMessage = document.getElementById('confirmMessage');
+        const modalCancel = document.getElementById('modalCancel');
+        const modalConfirm = document.getElementById('modalConfirm');
+        const formTitle = document.getElementById('formTitle');
+        
+        // Nuevos elementos del DOM añadidos
+        const barcodePreview = document.getElementById('barcodePreview');
+        const qrPreview = document.getElementById('qrPreview');
+        const barcodeContainer = document.getElementById('barcodeContainer');
+        
+        // Variables de estado
+        let videoStream = null;
+        let scanning = false;
+        let flashOn = false;
+        let currentTrack = null;
+        let currentProduct = null;
+        let isEditing = false;
+        let confirmCallback = null;
+        let lastScannedCodeType = ''; // 'barcode' o 'qr'
+        let lastScannedCode = '';
+        let scanQRTimeout = null;
+        
+        // Base de datos
+        let db;
+        const DB_NAME = 'InventoryManagerDB';
+        const DB_VERSION = 4;
+        const STORE_NAME = 'products';
+        
+        // Inicializar la base de datos
+        const initDB = () => {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, DB_VERSION);
+                
+                request.onupgradeneeded = (event) => {
+                    const db = event.target.result;
+                    if (!db.objectStoreNames.contains(STORE_NAME)) {
+                        const store = db.createObjectStore(STORE_NAME, { keyPath: 'code' });
+                        store.createIndex('by_category', 'category', { unique: false });
+                        store.createIndex('by_timestamp', 'timestamp', { unique: false });
+                        console.log('Base de datos creada correctamente');
+                    } else {
+                        db.deleteObjectStore(STORE_NAME);
+                        const store = db.createObjectStore(STORE_NAME, { keyPath: 'code' });
+                        store.createIndex('by_category', 'category', { unique: false });
+                        store.createIndex('by_timestamp', 'timestamp', { unique: false });
+                        console.log('Base de datos recreada para asegurar estructura');
+                    }
+                };
+                
+                request.onsuccess = (event) => {
+                    db = event.target.result;
+                    console.log('Base de datos abierta correctamente');
+                    resolve();
+                };
+                
+                request.onerror = (event) => {
+                    console.error('Error al abrir la base de datos:', event.target.error);
+                    reject('Error al abrir la base de datos: ' + event.target.error);
+                };
+            });
+        };
+        
+        // Guardar producto
+        const saveProduct = (product) => {
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction([STORE_NAME], 'readwrite');
+                const store = transaction.objectStore(STORE_NAME);
+                
+                if (!product.timestamp) {
+                    product.timestamp = new Date().toISOString();
+                }
+                
+                const request = store.put(product);
+                
+                request.onsuccess = () => {
+                    console.log('Producto guardado correctamente:', product);
+                    resolve();
+                };
+                request.onerror = (event) => {
+                    console.error('Error al guardar producto:', event.target.error);
+                    reject('Error al guardar el producto: ' + event.target.error);
+                };
+            });
+        };
+        
+        // Obtener todos los productos
+        const getAllProducts = () => {
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction([STORE_NAME], 'readonly');
+                const store = transaction.objectStore(STORE_NAME);
+                const index = store.index('by_timestamp');
+                const request = index.getAll();
+                
+                request.onsuccess = () => {
+                    console.log('Productos obtenidos:', request.result);
+                    resolve(request.result || []);
+                };
+                request.onerror = (event) => {
+                    console.error('Error al obtener productos:', event.target.error);
+                    reject('Error al obtener productos: ' + event.target.error);
+                };
+            });
+        };
+        
+        // Obtener producto por código
+        const getProductByCode = (code) => {
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction([STORE_NAME], 'readonly');
+                const store = transaction.objectStore(STORE_NAME);
+                const request = store.get(code);
+                
+                request.onsuccess = () => {
+                    console.log('Producto obtenido por código:', request.result);
+                    resolve(request.result);
+                };
+                request.onerror = (event) => {
+                    console.error('Error al buscar producto:', event.target.error);
+                    reject('Error al buscar producto: ' + event.target.error);
+                };
+            });
+        };
+        
+        // Eliminar producto
+        const deleteProduct = (code) => {
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction([STORE_NAME], 'readwrite');
+                const store = transaction.objectStore(STORE_NAME);
+                const request = store.delete(code);
+                
+                request.onsuccess = () => {
+                    console.log('Producto eliminado correctamente:', code);
+                    resolve();
+                };
+                request.onerror = (event) => {
+                    console.error('Error al eliminar producto:', event.target.error);
+                    reject('Error al eliminar producto: ' + event.target.error);
+                };
+            });
+        };
+        
+        // Mostrar productos en la lista
+        const displayProducts = async () => {
+            try {
+                console.log('Cargando productos para mostrar...');
+                const products = await getAllProducts();
+                productList.innerHTML = '';
+                
+                if (products.length === 0) {
+                    emptyListMessage.style.display = 'block';
+                    console.log('No hay productos para mostrar');
+                    return;
+                }
+                
+                emptyListMessage.style.display = 'none';
+                console.log('Mostrando productos:', products.length);
+                
+                products.forEach(product => {
+                    const productItem = document.createElement('div');
+                    productItem.className = 'product-item';
+                    
+                    // Extraer la descripción sin el código para mostrarla en la lista
+                    let shortDescription = product.description || '';
+                    if (shortDescription.includes('<div class="scanned-code">')) {
+                        shortDescription = shortDescription.split('<hr/>')[1] || '';
+                        shortDescription = shortDescription.substring(0, 100) + (shortDescription.length > 100 ? '...' : '');
+                    }
+                    
+                    productItem.innerHTML = `
+                        <div class="product-header">
+                            <span class="product-code">${product.code}</span>
+                            <span class="product-timestamp">${formatDate(product.timestamp)}</span>
+                        </div>
+                        <div class="product-details">
+                            <div class="product-name">${product.name || 'UNNAMED ITEM'}</div>
+                            ${shortDescription ? `<div class="product-description">${shortDescription}</div>` : ''}
+                            ${product.category ? `<span class="product-category">${getCategoryName(product.category)}</span>` : ''}
+                            <span class="product-quantity">QUANTITY: ${product.quantity || 1}</span>
+                        </div>
+                        <div class="product-actions">
+                            <button class="edit-btn" data-code="${product.code}">EDIT</button>
+                            <button class="delete-btn" data-code="${product.code}">TERMINATE</button>
+                        </div>
+                    `;
+                    productList.appendChild(productItem);
+                });
+                
+                // Agregar eventos a los botones
+                document.querySelectorAll('.edit-btn').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        openEditForm(btn.getAttribute('data-code'));
+                    });
+                });
+                
+                document.querySelectorAll('.delete-btn').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        showConfirmModal(
+                            `TERMINATE ITEM ${btn.getAttribute('data-code')}?`,
+                            async () => {
+                                try {
+                                    await deleteProduct(btn.getAttribute('data-code'));
+                                    await displayProducts();
+                                    updateStatus('ITEM TERMINATED', 'status-detected');
+                                } catch (error) {
+                                    updateStatus(error, 'status-error');
+                                }
+                            }
+                        );
+                    });
+                });
+                
+            } catch (error) {
+                console.error('Error al mostrar productos:', error);
+                updateStatus('Error al cargar productos: ' + error, 'status-error');
+            }
+        };
+        
+        // Mostrar modal de confirmación
+        const showConfirmModal = (message, callback) => {
+            confirmMessage.textContent = message;
+            confirmCallback = callback;
+            confirmModal.style.display = 'flex';
+        };
+        
+        // Ocultar modal de confirmación
+        const hideConfirmModal = () => {
+            confirmModal.style.display = 'none';
+            confirmCallback = null;
+        };
+        
+        // Formatear fecha
+        const formatDate = (isoString) => {
+            const date = new Date(isoString);
+            return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+        };
+        
+        // Obtener nombre de categoría
+        const getCategoryName = (category) => {
+            const categories = {
+                'alimentos': 'SUSTENANCE',
+                'bebidas': 'BEVERAGES',
+                'limpieza': 'CLEANSING',
+                'otros': 'OTHER'
+            };
+            return categories[category] || category;
+        };
+        
+        // Actualizar estado
+        const updateStatus = (message, type = 'status-scanning') => {
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+        };
+        
+        // Mostrar formulario de producto
+        const showProductForm = (code = '', isExisting = false) => {
+            isEditing = isExisting;
+            formTitle.textContent = isExisting ? 'EDIT ITEM PROTOCOL' : 'NEW ITEM PROTOCOL';
+            
+            productCodeInput.value = code;
+            codeExistsDiv.style.display = isExisting ? 'block' : 'none';
+            
+            if (isExisting) {
+                getProductByCode(code).then(product => {
+                    if (product) {
+                        currentProduct = product;
+                        productNameInput.value = product.name || '';
+                        
+                        // Extraer la descripción sin la parte del código
+                        let description = product.description || '';
+                        if (description.includes('<div class="scanned-code">')) {
+                            description = description.split('<hr/>')[1] || '';
+                        }
+                        
+                        productDescriptionInput.value = description;
+                        productCategoryInput.value = product.category || '';
+                        productQuantityInput.value = product.quantity || 1;
+                        
+                        // Mostrar el código existente
+                        if (product.codeType && product.codeImage) {
+                            lastScannedCodeType = product.codeType;
+                            if (product.codeType === 'barcode') {
+                                JsBarcode(barcodePreview, code, {
+                                    format: "CODE128",
+                                    lineColor: "#0f0",
+                                    width: 2,
+                                    height: 100,
+                                    displayValue: true,
+                                    fontSize: 16,
+                                    margin: 10
+                                });
+                                barcodePreview.classList.remove('hidden');
+                                qrPreview.classList.add('hidden');
+                            } else {
+                                const img = new Image();
+                                img.onload = function() {
+                                    qrPreview.width = img.width;
+                                    qrPreview.height = img.height;
+                                    const ctx = qrPreview.getContext('2d');
+                                    ctx.drawImage(img, 0, 0);
+                                    qrPreview.classList.remove('hidden');
+                                    barcodePreview.classList.add('hidden');
+                                };
+                                img.src = product.codeImage;
+                            }
+                        }
+                    }
+                }).catch(error => {
+                    console.error('Error al cargar producto para editar:', error);
+                    updateStatus('Error al cargar producto: ' + error, 'status-error');
+                });
+            } else {
+                currentProduct = null;
+                productNameInput.value = '';
+                productDescriptionInput.value = '';
+                productCategoryInput.value = '';
+                productQuantityInput.value = 1;
+                
+                // Generar vista previa del nuevo código
+                if (code) {
+                    generateCodePreview(code, lastScannedCodeType);
+                }
+            }
+            
+            productForm.style.display = 'block';
+            productNameInput.focus();
+        };
+        
+        // Ocultar formulario de producto
+        const hideProductForm = () => {
+            productForm.style.display = 'none';
+            currentProduct = null;
+            isEditing = false;
+        };
+        
+        // Validar formulario
+        const validateForm = () => {
+            if (!productNameInput.value.trim()) {
+                updateStatus('ENTER ITEM DESIGNATION', 'status-error');
+                productNameInput.focus();
+                return false;
+            }
+            
+            if (!productCodeInput.value.trim()) {
+                updateStatus('INVALID IDENTIFIER', 'status-error');
+                return false;
+            }
+            
+            return true;
+        };
+        
+        // Función para generar la vista previa del código
+        const generateCodePreview = (code, type) => {
+            // Ocultar todos los tipos de código primero
+            barcodePreview.classList.add('hidden');
+            qrPreview.classList.add('hidden');
+            
+            if (type === 'barcode') {
+                // Generar código de barras
+                JsBarcode(barcodePreview, code, {
+                    format: "CODE128",
+                    lineColor: "#0f0",
+                    width: 2,
+                    height: 100,
+                    displayValue: true,
+                    fontSize: 16,
+                    margin: 10
+                });
+                barcodePreview.classList.remove('hidden');
+            } else {
+                // Generar QR
+                generateQRCode(code);
+                qrPreview.classList.remove('hidden');
+            }
+        };
+        
+        // Función para generar código QR
+        const generateQRCode = (text) => {
+            const canvas = qrPreview;
+            const ctx = canvas.getContext('2d');
+            
+            // Tamaño del QR
+            const size = Math.min(barcodeContainer.offsetWidth - 20, 300);
+            canvas.width = size;
+            canvas.height = size;
+            
+            // Limpiar canvas
+            ctx.fillStyle = 'black';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Configuración del QR
+            const cellSize = 6;
+            const margin = 2;
+            const data = encodeURIComponent(text);
+            const url = `https://api.qrserver.com/v1/create-qr-code/?size=${canvas.width}x${canvas.height}&data=${data}&margin=${margin}&color=00ff00&bgcolor=000000`;
+            
+            const img = new Image();
+            img.crossOrigin = "Anonymous";
+            img.onload = function() {
+                ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            };
+            img.onerror = function() {
+                // Fallback si no se puede cargar el QR
+                ctx.fillStyle = '#0f0';
+                ctx.font = '16px "Share Tech Mono", monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText('QR CODE: ' + text, canvas.width/2, canvas.height/2);
+            };
+            img.src = url;
+        };
+        
+        // Iniciar escáner
+        const startScanner = async () => {
+            try {
+                updateStatus('INITIALIZING SCANNER...', 'status-scanning');
+                
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: 'environment',
+                        width: { min: 640, ideal: 1280 },
+                        height: { min: 480, ideal: 720 },
+                        aspectRatio: { ideal: 4/3 },
+                        focusMode: 'continuous'
+                    }
+                });
+                
+                videoStream = stream;
+                currentTrack = stream.getVideoTracks()[0];
+                scannerVideo.srcObject = stream;
+                await scannerVideo.play();
+                
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                flashBtn.disabled = false;
+                
+                // Configurar Quagga para códigos de barras
+                Quagga.init({
+                    inputStream: {
+                        name: "Live",
+                        type: "LiveStream",
+                        target: scannerVideo,
+                        constraints: {
+                            facingMode: "environment",
+                            width: { min: 640, ideal: 1280 },
+                            height: { min: 480, ideal: 720 },
+                            aspectRatio: { ideal: 4/3 }
+                        },
+                    },
+                    decoder: {
+                        readers: [
+                            "code_128_reader",
+                            "ean_reader",
+                            "ean_8_reader",
+                            "code_39_reader",
+                            "upc_reader",
+                            "upc_e_reader"
+                        ],
+                        debug: {
+                            drawBoundingBox: false,
+                            showFrequency: false,
+                            drawScanline: false,
+                            showPattern: false
+                        }
+                    },
+                    locate: true,
+                    frequency: 5,
+                    numOfWorkers: navigator.hardwareConcurrency || 4,
+                    patches: {
+                        x: 0.25, y: 0.25, width: 0.5, height: 0.5
+                    }
+                }, function(err) {
+                    if (err) {
+                        updateStatus('SCANNER INIT FAILED: ' + err, 'status-error');
+                        console.error(err);
+                        return;
+                    }
+                    Quagga.start();
+                    scanning = true;
+                    updateStatus('SCANNING... PRESENT CODE', 'status-scanning');
+                    
+                    // Iniciar también el detector de QR
+                    startQRScanner();
+                });
+                
+                Quagga.onDetected(async (result) => {
+                    if (!result.codeResult || !scanning) return;
+                    
+                    const code = result.codeResult.code;
+                    if (code === lastScannedCode) return;
+                    
+                    lastScannedCode = code;
+                    lastScannedCodeType = 'barcode';
+                    processDetectedCode(code);
+                });
+                
+            } catch (error) {
+                updateStatus('ERROR: ' + error.message, 'status-error');
+                console.error(error);
+            }
+        };
+        
+        // Iniciar detector de QR
+        const startQRScanner = () => {
+            const scanQRFrame = () => {
+                if (!scanning || !scannerVideo.videoWidth) {
+                    return;
+                }
+                
+                try {
+                    const canvas = document.createElement('canvas');
+                    // Reducir el tamaño para mejorar el rendimiento
+                    const reductionFactor = 0.7;
+                    canvas.width = scannerVideo.videoWidth * reductionFactor;
+                    canvas.height = scannerVideo.videoHeight * reductionFactor;
+                    
+                    const ctx = canvas.getContext('2d');
+                    // Dibujar el video reducido en el canvas
+                    ctx.drawImage(scannerVideo, 0, 0, canvas.width, canvas.height);
+                    
+                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                        inversionAttempts: 'dontInvert',
+                        greyScaleWeights: {
+                            red: 0.299,
+                            green: 0.587,
+                            blue: 0.114,
+                        },
+                        minConfidence: 0.5
+                    });
+                    
+                    if (code && code.data && code.data !== lastScannedCode) {
+                        lastScannedCode = code.data;
+                        lastScannedCodeType = 'qr';
+                        processDetectedCode(code.data);
+                    } else {
+                        if (scanning) {
+                            requestAnimationFrame(scanQRFrame);
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error en el escaneo QR:', error);
+                    if (scanning) {
+                        requestAnimationFrame(scanQRFrame);
+                    }
+                }
+            };
+            
+            scanQRFrame();
+        };
+        
+        // Procesar código detectado
+        const processDetectedCode = async (code) => {
+            if (!code || !scanning) return;
+            
+            try {
+                // Detener el escáner temporalmente
+                stopScanner();
+                
+                // Generar la vista previa del código
+                generateCodePreview(code, lastScannedCodeType);
+                
+                // Verificar si el código ya existe
+                const existingProduct = await getProductByCode(code);
+                
+                if (existingProduct) {
+                    updateStatus(`IDENTIFIER ${code} ALREADY EXISTS`, 'status-warning');
+                    showProductForm(code, true);
+                } else {
+                    updateStatus(`NEW CODE DETECTED: ${code}`, 'status-detected');
+                    showProductForm(code, false);
+                }
+                
+                // Feedback háptico
+                if (navigator.vibrate) navigator.vibrate(200);
+                
+            } catch (error) {
+                updateStatus('ERROR: ' + error, 'status-error');
+                resumeScanner();
+            }
+        };
+        
+        // Detener escáner
+        const stopScanner = () => {
+            if (Quagga) {
+                Quagga.stop();
+            }
+            scanning = false;
+        };
+        
+        // Reanudar escáner
+        const resumeScanner = () => {
+            if (Quagga && videoStream) {
+                Quagga.start();
+                scanning = true;
+                lastScannedCode = '';
+                updateStatus('SCANNING... PRESENT CODE', 'status-scanning');
+                startQRScanner();
+            }
+        };
+        
+        // Detener completamente
+        const stopScannerCompletely = () => {
+            stopScanner();
+            
+            if (videoStream) {
+                videoStream.getTracks().forEach(track => track.stop());
+                videoStream = null;
+            }
+            
+            scannerVideo.srcObject = null;
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            flashBtn.disabled = true;
+            flashOn = false;
+            flashBtn.textContent = 'FLASH MODE';
+            flashBtn.classList.remove('flash-on');
+            
+            updateStatus('SCANNER TERMINATED', 'status-detected');
+        };
+        
+        // Control del flash
+        const toggleFlash = async () => {
+            if (!currentTrack || !currentTrack.getCapabilities().torch) {
+                updateStatus('FLASH UNAVAILABLE', 'status-error');
+                return;
+            }
+            
+            try {
+                flashOn = !flashOn;
+                await currentTrack.applyConstraints({
+                    advanced: [{ torch: flashOn }]
+                });
+                
+                flashBtn.textContent = flashOn ? 'FLASH ACTIVE' : 'FLASH MODE';
+                flashBtn.classList.toggle('flash-on', flashOn);
+                
+            } catch (error) {
+                updateStatus('FLASH CONTROL ERROR: ' + error.message, 'status-error');
+            }
+        };
+        
+        // Guardar producto desde formulario
+        const saveProductHandler = async () => {
+            if (!validateForm()) return;
+            
+            // Obtener la representación del código como imagen
+            let codeImage = '';
+            const code = productCodeInput.value.trim();
+            
+            if (lastScannedCodeType === 'barcode') {
+                // Convertir SVG a Data URL
+                const svgString = new XMLSerializer().serializeToString(barcodePreview);
+                codeImage = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svgString)));
+            } else {
+                // Convertir Canvas a Data URL
+                codeImage = qrPreview.toDataURL('image/png');
+            }
+            
+            // Crear HTML para insertar en la descripción
+            const codeHTML = `<div class="scanned-code">
+                <p><strong>ORIGINAL ${lastScannedCodeType === 'barcode' ? 'BARCODE' : 'QR CODE'}:</strong></p>
+                <img src="${codeImage}" alt="${code}" style="max-width: 200px; height: auto;"/>
+            </div>`;
+            
+            const product = {
+                code: code,
+                name: productNameInput.value.trim(),
+                description: codeHTML + (productDescriptionInput.value.trim() ? 
+                    '<hr/>' + productDescriptionInput.value.trim() : ''),
+                category: productCategoryInput.value,
+                quantity: parseInt(productQuantityInput.value) || 1,
+                timestamp: currentProduct?.timestamp || new Date().toISOString(),
+                codeType: lastScannedCodeType,
+                codeImage: codeImage
+            };
+            
+            try {
+                await saveProduct(product);
+                hideProductForm();
+                await displayProducts();
+                updateStatus(`ITEM "${product.name}" COMMITTED`, 'status-detected');
+                
+                // Reanudar el escáner si no está editando
+                if (!isEditing) {
+                    resumeScanner();
+                }
+                
+            } catch (error) {
+                updateStatus('COMMIT ERROR: ' + error, 'status-error');
+            }
+        };
+        
+        // Abrir formulario de edición
+        const openEditForm = async (code) => {
+            try {
+                const product = await getProductByCode(code);
+                if (product) {
+                    showProductForm(code, true);
+                }
+            } catch (error) {
+                updateStatus('LOAD ERROR: ' + error, 'status-error');
+            }
+        };
+        
+        // Event listeners
+        startBtn.addEventListener('click', startScanner);
+        stopBtn.addEventListener('click', stopScannerCompletely);
+        flashBtn.addEventListener('click', toggleFlash);
+        saveBtn.addEventListener('click', saveProductHandler);
+        cancelBtn.addEventListener('click', () => {
+            hideProductForm();
+            resumeScanner();
+        });
+        modalCancel.addEventListener('click', hideConfirmModal);
+        modalConfirm.addEventListener('click', () => {
+            if (confirmCallback) confirmCallback();
+            hideConfirmModal();
+        });
+        
+        // Efecto de terminal escribiendo
+        const typeWriter = (element, text, speed = 50) => {
+            let i = 0;
+            element.textContent = '';
+            const typing = setInterval(() => {
+                if (i < text.length) {
+                    element.textContent += text.charAt(i);
+                    i++;
+                } else {
+                    clearInterval(typing);
+                    element.classList.add('terminal-cursor');
+                }
+            }, speed);
+        };
+        
+        // Inicialización
+        window.addEventListener('DOMContentLoaded', async () => {
+            try {
+                // Efecto de inicio
+                typeWriter(statusDiv, "BOOTING SYSTEM...");
+                await new Promise(resolve => setTimeout(resolve, 1500));
+                typeWriter(statusDiv, "LOADING DATABASE MODULE...");
+                
+                await initDB();
+                
+                typeWriter(statusDiv, "LOADING INVENTORY DATA...");
+                await displayProducts();
+                
+                typeWriter(statusDiv, "SYSTEM READY");
+                
+                if (window.location.protocol === 'file:') {
+                    updateStatus(
+                        'WARNING: LOAD FROM WEB SERVER FOR OPTIMAL FUNCTION',
+                        'status-warning'
+                    );
+                }
+                
+                console.log('Aplicación iniciada correctamente');
+            } catch (error) {
+                console.error('Error al iniciar aplicación:', error);
+                updateStatus('SYSTEM FAILURE: ' + error, 'status-error');
+            }
+        });
+    </script>
+</body>
+</html>
