@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Inventario</title>
+    <script src="https://cdn.jsdelivr.net/npm/quagga@0.12.1/dist/quagga.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .scanner-container {
+            position: relative;
+            width: 100%;
+            height: 300px;
+            margin: 20px 0;
+            border: 3px solid #ddd;
+            overflow: hidden;
+        }
+        #scanner {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin: 20px 0;
+        }
+        button {
+            padding: 10px 15px;
+            background: #4285f4;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:disabled {
+            background: #ccc;
+        }
+        #flashBtn {
+            background: #f4b400;
+        }
+        .product-list {
+            margin-top: 30px;
+        }
+        .product-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px;
+            border-bottom: 1px solid #eee;
+            align-items: center;
+        }
+        .product-info {
+            flex-grow: 1;
+        }
+        .product-actions {
+            display: flex;
+            gap: 5px;
+        }
+        .edit-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            background: white;
+            padding: 20px;
+            border-radius: 5px;
+            width: 90%;
+            max-width: 400px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 8px;
+            box-sizing: border-box;
+        }
+        .modal-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+        #detectionStatus {
+            text-align: center;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>Gestión de Inventario</h1>
+    
+    <div class="scanner-container">
+        <video id="scanner" playsinline></video>
+    </div>
+    
+    <div id="detectionStatus">Escáner listo</div>
+    
+    <div class="controls">
+        <button id="startBtn">Iniciar Escáner</button>
+        <button id="flashBtn">Activar Flash</button>
+        <button id="stopBtn" disabled>Detener</button>
+    </div>
+    
+    <div class="product-list">
+        <h2>Productos Escaneados</h2>
+        <div id="productList"></div>
+    </div>
+    
+    <!-- Modal para editar -->
+    <div id="editModal" class="edit-modal">
+        <div class="modal-content">
+            <h3>Editar Producto</h3>
+            <div class="form-group">
+                <label>Código de Barras:</label>
+                <input type="text" id="editBarcode" readonly>
+            </div>
+            <div class="form-group">
+                <label>Nombre del Producto:</label>
+                <input type="text" id="editProductName" placeholder="Ej: Leche Entera 1L">
+            </div>
+            <div class="modal-actions">
+                <button id="cancelEdit">Cancelar</button>
+                <button id="saveEdit">Guardar</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Elementos del DOM
+        const startBtn = document.getElementById('startBtn');
+        const flashBtn = document.getElementById('flashBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const scannerVideo = document.getElementById('scanner');
+        const productList = document.getElementById('productList');
+        const detectionStatus = document.getElementById('detectionStatus');
+        const editModal = document.getElementById('editModal');
+        const editBarcode = document.getElementById('editBarcode');
+        const editProductName = document.getElementById('editProductName');
+        const cancelEditBtn = document.getElementById('cancelEdit');
+        const saveEditBtn = document.getElementById('saveEdit');
+        
+        // Variables de estado
+        let videoStream = null;
+        let scanning = false;
+        let flashOn = false;
+        let currentTrack = null;
+        let currentEditingItem = null;
+        
+        // Base de datos local
+        let inventoryDB;
+        const DB_NAME = 'InventoryDB';
+        const DB_VERSION = 1;
+        const STORE_NAME = 'products';
+        
+        // Inicializar la base de datos
+        function initDB() {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, DB_VERSION);
+                
+                request.onupgradeneeded = (event) => {
+                    const db = event.target.result;
+                    if (!db.objectStoreNames.contains(STORE_NAME)) {
+                        db.createObjectStore(STORE_NAME, { keyPath: 'barcode' });
+                    }
+                };
+                
+                request.onsuccess = (event) => {
+                    inventoryDB = event.target.result;
+                    resolve();
+                };
+                
+                request.onerror = (event) => {
+                    reject('Error al abrir la base de datos');
+                };
+            });
+        }
+        
+        // Guardar producto
+        function saveProduct(product) {
+            return new Promise((resolve, reject) => {
+                const transaction = inventoryDB.transaction([STORE_NAME], 'readwrite');
+                const store = transaction.objectStore(STORE_NAME);
+                
+                const request = store.put(product);
+                
+                request.onsuccess = () => resolve();
+                request.onerror = () => reject('Error al guardar el producto');
+            });
+        }
+        
+        // Obtener todos los productos
+        function getAllProducts() {
+            return new Promise((resolve, reject) => {
+                const transaction = inventoryDB.transaction([STORE_NAME], 'readonly');
+                const store = transaction.objectStore(STORE_NAME);
+                const request = store.getAll();
+                
+                request.onsuccess = () => resolve(request.result || []);
+                request.onerror = () => reject('Error al obtener productos');
+            });
+        }
+        
+        // Eliminar producto
+        function deleteProduct(barcode) {
+            return new Promise((resolve, reject) => {
+                const transaction = inventoryDB.transaction([STORE_NAME], 'readwrite');
+                const store = transaction.objectStore(STORE_NAME);
+                const request = store.delete(barcode);
+                
+                request.onsuccess = () => resolve();
+                request.onerror = () => reject('Error al eliminar producto');
+            });
+        }
+        
+        // Mostrar productos en la lista
+        async function displayProducts() {
+            try {
+                const products = await getAllProducts();
+                productList.innerHTML = '';
+                
+                if (products.length === 0) {
+                    productList.innerHTML = '<p>No hay productos escaneados aún.</p>';
+                    return;
+                }
+                
+                products.forEach(product => {
+                    const productItem = document.createElement('div');
+                    productItem.className = 'product-item';
+                    productItem.innerHTML = `
+                        <div class="product-info">
+                            <strong>${product.barcode}</strong>
+                            <div>${product.name || 'Sin nombre'}</div>
+                        </div>
+                        <div class="product-actions">
+                            <button class="edit-btn" data-barcode="${product.barcode}">Editar</button>
+                            <button class="delete-btn" data-barcode="${product.barcode}">Eliminar</button>
+                        </div>
+                    `;
+                    productList.appendChild(productItem);
+                });
+                
+                // Agregar eventos a los botones
+                document.querySelectorAll('.edit-btn').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        openEditModal(btn.getAttribute('data-barcode'));
+                    });
+                });
+                
+                document.querySelectorAll('.delete-btn').forEach(btn => {
+                    btn.addEventListener('click', async () => {
+                        if (confirm('¿Eliminar este producto?')) {
+                            try {
+                                await deleteProduct(btn.getAttribute('data-barcode'));
+                                await displayProducts();
+                                detectionStatus.textContent = 'Producto eliminado';
+                                setTimeout(() => detectionStatus.textContent = '', 2000);
+                            } catch (error) {
+                                alert(error);
+                            }
+                        }
+                    });
+                });
+                
+            } catch (error) {
+                alert(error);
+            }
+        }
+        
+        // Abrir modal de edición
+        async function openEditModal(barcode) {
+            try {
+                const products = await getAllProducts();
+                const product = products.find(p => p.barcode === barcode);
+                
+                if (!product) {
+                    alert('Producto no encontrado');
+                    return;
+                }
+                
+                currentEditingItem = product;
+                editBarcode.value = product.barcode;
+                editProductName.value = product.name || '';
+                editModal.style.display = 'flex';
+                editProductName.focus();
+                
+            } catch (error) {
+                alert(error);
+            }
+        }
+        
+        // Cerrar modal de edición
+        function closeEditModal() {
+            editModal.style.display = 'none';
+            currentEditingItem = null;
+        }
+        
+        // Iniciar el escáner
+        async function startScanner() {
+            try {
+                detectionStatus.textContent = 'Iniciando escáner...';
+                
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: 'environment',
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    }
+                });
+                
+                videoStream = stream;
+                currentTrack = stream.getVideoTracks()[0];
+                scannerVideo.srcObject = stream;
+                await scannerVideo.play();
+                
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                flashBtn.disabled = false;
+                
+                detectionStatus.textContent = 'Escaneando...';
+                
+                // Configurar Quagga
+                Quagga.init({
+                    inputStream: {
+                        name: "Live",
+                        type: "LiveStream",
+                        target: scannerVideo,
+                        constraints: {
+                            facingMode: "environment",
+                            width: { ideal: 1280 },
+                            height: { ideal: 720 }
+                        },
+                    },
+                    decoder: {
+                        readers: [
+                            "code_128_reader",
+                            "ean_reader",
+                            "ean_8_reader",
+                            "code_39_reader",
+                            "upc_reader",
+                            "upc_e_reader"
+                        ]
+                    },
+                    locate: true
+                }, function(err) {
+                    if (err) {
+                        detectionStatus.textContent = 'Error al iniciar escáner';
+                        console.error(err);
+                        return;
+                    }
+                    Quagga.start();
+                });
+                
+                Quagga.onDetected(async (result) => {
+                    if (result.codeResult) {
+                        const barcode = result.codeResult.code;
+                        detectionStatus.textContent = `Detectado: ${barcode}`;
+                        
+                        try {
+                            // Verificar si ya existe
+                            const products = await getAllProducts();
+                            const exists = products.some(p => p.barcode === barcode);
+                            
+                            if (!exists) {
+                                await saveProduct({
+                                    barcode: barcode,
+                                    name: '',
+                                    timestamp: new Date().toISOString()
+                                });
+                                await displayProducts();
+                                openEditModal(barcode);
+                            } else {
+                                detectionStatus.textContent = `Código ${barcode} ya existe`;
+                            }
+                            
+                            // Feedback háptico
+                            if (navigator.vibrate) navigator.vibrate(200);
+                            
+                        } catch (error) {
+                            alert(error);
+                        }
+                    }
+                });
+                
+            } catch (error) {
+                detectionStatus.textContent = 'Error: ' + error.message;
+                console.error(error);
+            }
+        }
+        
+        // Detener el escáner
+        function stopScanner() {
+            if (Quagga) {
+                Quagga.stop();
+            }
+            
+            if (videoStream) {
+                videoStream.getTracks().forEach(track => track.stop());
+                videoStream = null;
+            }
+            
+            scannerVideo.srcObject = null;
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            flashBtn.disabled = true;
+            flashOn = false;
+            flashBtn.textContent = 'Activar Flash';
+            
+            detectionStatus.textContent = 'Escáner detenido';
+        }
+        
+        // Control del flash
+        async function toggleFlash() {
+            if (!currentTrack || !currentTrack.getCapabilities().torch) {
+                alert('Tu dispositivo no soporta flash o no tiene permiso');
+                return;
+            }
+            
+            try {
+                flashOn = !flashOn;
+                await currentTrack.applyConstraints({
+                    advanced: [{ torch: flashOn }]
+                });
+                
+                flashBtn.textContent = flashOn ? 'Desactivar Flash' : 'Activar Flash';
+                
+            } catch (error) {
+                alert('Error al controlar el flash: ' + error.message);
+            }
+        }
+        
+        // Event Listeners
+        startBtn.addEventListener('click', startScanner);
+        stopBtn.addEventListener('click', stopScanner);
+        flashBtn.addEventListener('click', toggleFlash);
+        cancelEditBtn.addEventListener('click', closeEditModal);
+        
+        saveEditBtn.addEventListener('click', async () => {
+            const newName = editProductName.value.trim();
+            
+            if (!newName) {
+                alert('Por favor ingrese un nombre para el producto');
+                return;
+            }
+            
+            try {
+                await saveProduct({
+                    ...currentEditingItem,
+                    name: newName
+                });
+                
+                await displayProducts();
+                closeEditModal();
+                detectionStatus.textContent = 'Producto actualizado';
+                setTimeout(() => detectionStatus.textContent = '', 2000);
+                
+            } catch (error) {
+                alert(error);
+            }
+        });
+        
+        // Inicialización
+        (async function() {
+            try {
+                await initDB();
+                await displayProducts();
+                
+                // Verificar si es archivo local
+                if (window.location.protocol === 'file:') {
+                    detectionStatus.textContent = 'ADVERTENCIA: Debes cargar esta página desde un servidor web para que funcione correctamente';
+                }
+                
+            } catch (error) {
+                alert('Error al iniciar la aplicación: ' + error);
+            }
+        })();
+    </script>
+</body>
+</html>
