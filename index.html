@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Escáner con Confirmación</title>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/quagga@0.12.1/dist/quagga.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .scanner-container {
+            position: relative;
+            width: 100%;
+            height: 300px;
+            margin: 20px 0;
+            border: 3px solid #333;
+            border-radius: 8px;
+            overflow: hidden;
+            background-color: #000;
+        }
+        #scanner {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin: 20px 0;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        button {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 6px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s;
+            min-width: 150px;
+        }
+        #startBtn {
+            background-color: #4CAF50;
+            color: white;
+        }
+        #stopBtn {
+            background-color: #f44336;
+            color: white;
+        }
+        #flashBtn {
+            background-color: #FFC107;
+            color: #333;
+        }
+        button:disabled {
+            background-color: #cccccc !important;
+            cursor: not-allowed;
+        }
+        .status {
+            text-align: center;
+            margin: 15px 0;
+            padding: 10px;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .detected {
+            background-color: #E8F5E9;
+            color: #2E7D32;
+        }
+        .scanning {
+            background-color: #E3F2FD;
+            color: #1565C0;
+        }
+        .error {
+            background-color: #FFEBEE;
+            color: #C62828;
+        }
+        .product-form {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: none;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+        .form-actions {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        #saveProduct {
+            background-color: #4CAF50;
+            color: white;
+        }
+        #cancelSave {
+            background-color: #f44336;
+            color: white;
+        }
+        .product-list {
+            margin-top: 30px;
+        }
+        .product-item {
+            background-color: white;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .product-info {
+            flex-grow: 1;
+        }
+        .product-code {
+            font-weight: bold;
+            color: #1976D2;
+        }
+        .product-actions {
+            display: flex;
+            gap: 5px;
+        }
+        .edit-btn {
+            background-color: #2196F3;
+            color: white;
+            padding: 8px 12px;
+            font-size: 14px;
+        }
+        .delete-btn {
+            background-color: #f44336;
+            color: white;
+            padding: 8px 12px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Escáner con Confirmación</h1>
+    
+    <div class="scanner-container">
+        <video id="scanner" playsinline></video>
+    </div>
+    
+    <div id="status" class="status scanning">Preparando escáner...</div>
+    
+    <div class="controls">
+        <button id="startBtn">Iniciar Escáner</button>
+        <button id="flashBtn">Activar Flash</button>
+        <button id="stopBtn" disabled>Detener Escáner</button>
+    </div>
+    
+    <div id="productForm" class="product-form">
+        <h3>Nuevo Producto Detectado</h3>
+        <div class="form-group">
+            <label>Código:</label>
+            <input type="text" id="detectedCode" readonly>
+        </div>
+        <div class="form-group">
+            <label>Nombre del Producto:</label>
+            <input type="text" id="productName" placeholder="Ej: Leche Entera 1L" autofocus>
+        </div>
+        <div class="form-actions">
+            <button id="cancelSave">Cancelar</button>
+            <button id="saveProduct">Guardar</button>
+        </div>
+    </div>
+    
+    <div class="product-list">
+        <h2>Productos Registrados</h2>
+        <div id="productList"></div>
+    </div>
+
+    <script>
+        // Elementos del DOM
+        const startBtn = document.getElementById('startBtn');
+        const flashBtn = document.getElementById('flashBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const scannerVideo = document.getElementById('scanner');
+        const statusDiv = document.getElementById('status');
+        const productForm = document.getElementById('productForm');
+        const detectedCodeInput = document.getElementById('detectedCode');
+        const productNameInput = document.getElementById('productName');
+        const cancelSaveBtn = document.getElementById('cancelSave');
+        const saveProductBtn = document.getElementById('saveProduct');
+        const productList = document.getElementById('productList');
+        
+        // Variables de estado
+        let videoStream = null;
+        let scanning = false;
+        let flashOn = false;
+        let currentTrack = null;
+        let currentDetectedCode = null;
+        let scannerType = 'quagga'; // 'quagga' o 'jsQR'
+        
+        // Base de datos
+        let db;
+        const initDB = () => {
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open('ProductScannerDB', 1);
+                
+                request.onupgradeneeded = (event) => {
+                    db = event.target.result;
+                    if (!db.objectStoreNames.contains('products')) {
+                        db.createObjectStore('products', { keyPath: 'code' });
+                    }
+                };
+                
+                request.onsuccess = (event) => {
+                    db = event.target.result;
+                    resolve();
+                };
+                
+                request.onerror = (event) => {
+                    reject('Error al abrir la base de datos');
+                };
+            });
+        };
+        
+        const saveProductToDB = (product) => {
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction(['products'], 'readwrite');
+                const store = transaction.objectStore('products');
+                
+                const request = store.put(product);
+                
+                request.onsuccess = () => resolve();
+                request.onerror = () => reject('Error al guardar el producto');
+            });
+        };
+        
+        const getAllProducts = () => {
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction(['products'], 'readonly');
+                const store = transaction.objectStore('products');
+                const request = store.getAll();
+                
+                request.onsuccess = () => resolve(request.result || []);
+                request.onerror = () => reject('Error al obtener productos');
+            });
+        };
+        
+        const deleteProductFromDB = (code) => {
+            return new Promise((resolve, reject) => {
+                const transaction = db.transaction(['products'], 'readwrite');
+                const store = transaction.objectStore('products');
+                const request = store.delete(code);
+                
+                request.onsuccess = () => resolve();
+                request.onerror = () => reject('Error al eliminar producto');
+            });
+        };
+        
+        // Mostrar productos
+        const displayProducts = async () => {
+            try {
+                const products = await getAllProducts();
+                productList.innerHTML = '';
+                
+                if (products.length === 0) {
+                    productList.innerHTML = '<p>No hay productos registrados aún.</p>';
+                    return;
+                }
+                
+                products.forEach(product => {
+                    const productItem = document.createElement('div');
+                    productItem.className = 'product-item';
+                    productItem.innerHTML = `
+                        <div class="product-info">
+                            <div class="product-code">${product.code}</div>
+                            <div>${product.name || 'Sin nombre asignado'}</div>
+                        </div>
+                        <div class="product-actions">
+                            <button class="edit-btn" data-code="${product.code}">Editar</button>
+                            <button class="delete-btn" data-code="${product.code}">Eliminar</button>
+                        </div>
+                    `;
+                    productList.appendChild(productItem);
+                });
+                
+                // Agregar eventos
+                document.querySelectorAll('.delete-btn').forEach(btn => {
+                    btn.addEventListener('click', async () => {
+                        const code = btn.getAttribute('data-code');
+                        if (confirm(`¿Eliminar el producto ${code}?`)) {
+                            try {
+                                await deleteProductFromDB(code);
+                                await displayProducts();
+                                updateStatus('Producto eliminado', 'detected');
+                            } catch (error) {
+                                updateStatus(error, 'error');
+                            }
+                        }
+                    });
+                });
+                
+                document.querySelectorAll('.edit-btn').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const code = btn.getAttribute('data-code');
+                        showProductForm(code);
+                    });
+                });
+                
+            } catch (error) {
+                updateStatus(error, 'error');
+            }
+        };
+        
+        // Mostrar formulario de producto
+        const showProductForm = (code, isNew = false) => {
+            currentDetectedCode = code;
+            detectedCodeInput.value = code;
+            productNameInput.value = '';
+            productForm.style.display = 'block';
+            productNameInput.focus();
+            
+            if (isNew) {
+                stopScanningTemporarily();
+            }
+        };
+        
+        // Ocultar formulario
+        const hideProductForm = () => {
+            productForm.style.display = 'none';
+            if (currentDetectedCode) {
+                resumeScanning();
+            }
+        };
+        
+        // Actualizar estado
+        const updateStatus = (message, type = 'scanning') => {
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+        };
+        
+        // Control del escáner
+        const startScanner = async () => {
+            try {
+                updateStatus('Iniciando escáner...');
+                
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: 'environment',
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    }
+                });
+                
+                videoStream = stream;
+                currentTrack = stream.getVideoTracks()[0];
+                scannerVideo.srcObject = stream;
+                await scannerVideo.play();
+                
+                startBtn.disabled = true;
+                stopBtn.disabled = false;
+                flashBtn.disabled = false;
+                
+                // Iniciar el detector según el tipo
+                if (scannerType === 'quagga') {
+                    startQuaggaScanner();
+                } else {
+                    startJsQRScanner();
+                }
+                
+                updateStatus('Escaneando... Busca un código de barras o QR');
+                scanning = true;
+                
+            } catch (error) {
+                updateStatus(`Error: ${error.message}`, 'error');
+                console.error(error);
+            }
+        };
+        
+        // Iniciar Quagga para códigos de barras
+        const startQuaggaScanner = () => {
+            Quagga.init({
+                inputStream: {
+                    name: "Live",
+                    type: "LiveStream",
+                    target: scannerVideo,
+                    constraints: {
+                        facingMode: "environment",
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    },
+                },
+                decoder: {
+                    readers: [
+                        "code_128_reader",
+                        "ean_reader",
+                        "ean_8_reader",
+                        "code_39_reader",
+                        "upc_reader",
+                        "upc_e_reader"
+                    ]
+                },
+                locate: true
+            }, (err) => {
+                if (err) {
+                    updateStatus('Error al iniciar Quagga', 'error');
+                    console.error(err);
+                    return;
+                }
+                Quagga.start();
+            });
+            
+            Quagga.onDetected(async (result) => {
+                if (result.codeResult && !currentDetectedCode) {
+                    const code = result.codeResult.code;
+                    updateStatus(`Código detectado: ${code}`, 'detected');
+                    
+                    // Verificar si ya existe
+                    try {
+                        const products = await getAllProducts();
+                        const exists = products.some(p => p.code === code);
+                        
+                        if (!exists) {
+                            currentDetectedCode = code;
+                            showProductForm(code, true);
+                        } else {
+                            updateStatus(`Código ${code} ya existe`, 'error');
+                            setTimeout(() => updateStatus('Escaneando...', 'scanning'), 2000);
+                        }
+                        
+                        // Feedback háptico
+                        if (navigator.vibrate) navigator.vibrate(200);
+                        
+                    } catch (error) {
+                        updateStatus(error, 'error');
+                    }
+                }
+            });
+        };
+        
+        // Iniciar jsQR para códigos QR
+        const startJsQRScanner = () => {
+            const scanFrame = () => {
+                if (!scanning || currentDetectedCode) return;
+                
+                if (scannerVideo.readyState === scannerVideo.HAVE_ENOUGH_DATA) {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = scannerVideo.videoWidth;
+                    canvas.height = scannerVideo.videoHeight;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(scannerVideo, 0, 0, canvas.width, canvas.height);
+                    
+                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                        inversionAttempts: 'attemptBoth',
+                    });
+                    
+                    if (code) {
+                        updateStatus(`QR detectado: ${code.data}`, 'detected');
+                        processDetectedCode(code.data);
+                    }
+                }
+                
+                requestAnimationFrame(scanFrame);
+            };
+            
+            scanFrame();
+        };
+        
+        // Procesar código detectado
+        const processDetectedCode = async (code) => {
+            if (!currentDetectedCode) {
+                // Verificar si ya existe
+                try {
+                    const products = await getAllProducts();
+                    const exists = products.some(p => p.code === code);
+                    
+                    if (!exists) {
+                        currentDetectedCode = code;
+                        showProductForm(code, true);
+                    } else {
+                        updateStatus(`Código ${code} ya existe`, 'error');
+                        setTimeout(() => updateStatus('Escaneando...', 'scanning'), 2000);
+                    }
+                    
+                    // Feedback háptico
+                    if (navigator.vibrate) navigator.vibrate(200);
+                    
+                } catch (error) {
+                    updateStatus(error, 'error');
+                }
+            }
+        };
+        
+        // Detener escaneo temporalmente
+        const stopScanningTemporarily = () => {
+            if (scannerType === 'quagga') {
+                Quagga.stop();
+            }
+            scanning = false;
+        };
+        
+        // Reanudar escaneo
+        const resumeScanning = () => {
+            currentDetectedCode = null;
+            if (scannerType === 'quagga') {
+                Quagga.start();
+            }
+            scanning = true;
+            updateStatus('Escaneando... Busca un código de barras o QR', 'scanning');
+        };
+        
+        // Detener completamente
+        const stopScanner = () => {
+            if (scannerType === 'quagga') {
+                Quagga.stop();
+                Quagga.offDetected();
+            }
+            
+            if (videoStream) {
+                videoStream.getTracks().forEach(track => track.stop());
+                videoStream = null;
+            }
+            
+            scannerVideo.srcObject = null;
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+            flashBtn.disabled = true;
+            flashOn = false;
+            flashBtn.textContent = 'Activar Flash';
+            
+            updateStatus('Escáner detenido');
+            scanning = false;
+            currentDetectedCode = null;
+        };
+        
+        // Control del flash
+        const toggleFlash = async () => {
+            if (!currentTrack || !currentTrack.getCapabilities().torch) {
+                updateStatus('Flash no disponible', 'error');
+                return;
+            }
+            
+            try {
+                flashOn = !flashOn;
+                await currentTrack.applyConstraints({
+                    advanced: [{ torch: flashOn }]
+                });
+                
+                flashBtn.textContent = flashOn ? 'Desactivar Flash' : 'Activar Flash';
+                
+            } catch (error) {
+                updateStatus('Error al controlar flash', 'error');
+                console.error(error);
+            }
+        };
+        
+        // Guardar producto
+        const saveProduct = async () => {
+            const name = productNameInput.value.trim();
+            const code = detectedCodeInput.value;
+            
+            if (!name) {
+                updateStatus('Ingresa un nombre para el producto', 'error');
+                productNameInput.focus();
+                return;
+            }
+            
+            try {
+                await saveProductToDB({
+                    code: code,
+                    name: name,
+                    timestamp: new Date().toISOString()
+                });
+                
+                hideProductForm();
+                await displayProducts();
+                updateStatus(`Producto "${name}" guardado`, 'detected');
+                
+            } catch (error) {
+                updateStatus(error, 'error');
+            }
+        };
+        
+        // Event listeners
+        startBtn.addEventListener('click', startScanner);
+        stopBtn.addEventListener('click', stopScanner);
+        flashBtn.addEventListener('click', toggleFlash);
+        cancelSaveBtn.addEventListener('click', hideProductForm);
+        saveProductBtn.addEventListener('click', saveProduct);
+        
+        // Inicialización
+        (async () => {
+            try {
+                await initDB();
+                await displayProducts();
+                
+                if (window.location.protocol === 'file:') {
+                    updateStatus('ADVERTENCIA: Debes cargar desde un servidor web', 'error');
+                }
+                
+            } catch (error) {
+                updateStatus(`Error al iniciar: ${error}`, 'error');
+            }
+        })();
+    </script>
+</body>
+</html>
